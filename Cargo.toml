@@ -1,2 +1,2 @@
 [workspace]
-members = [ "client","server", "sos-core"]
+members = [ "client", "server"]
