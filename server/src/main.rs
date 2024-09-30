@@ -1,4 +1,4 @@
-use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::spawn};
+use std::{io::{BufRead, BufReader, Read, Write}, net::{TcpListener, TcpStream}, sync::{mpsc::channel, Arc, Mutex}, thread::spawn};
 
 use state::State;
 
@@ -27,30 +27,33 @@ fn main() {
 fn handle(state: Arc<Mutex<State>>, mut stream: TcpStream) {
     // init phase
 
-    stream.write(b"Welcome! Please enter a username.").expect("Failed to ask for username.");
+    let mut write_stream = stream.try_clone().expect("could not clone connection");
 
-    let mut username_buffer = [0; 1024];
+    write_stream.write_all(b"Welcome! Please enter a username.").expect("Failed to ask for username.");
 
-    stream.read(&mut username_buffer).expect("failed to read username from client");
+    let mut reader = BufReader::new(&stream);
 
-    let username = String::from_utf8_lossy(&username_buffer[..]);
+    let mut username = String::new();
 
-    // TODO: username sanitation
+    reader.read_line(&mut username).expect("failed to read username from client");
 
-    let stream = Arc::new(Mutex::new(stream));
+    let (tx, rx) = channel::<String>();
 
-    state.lock().unwrap().users.insert(username.to_string(), Arc::clone(&stream));
+    state.lock().unwrap().users.insert(username.to_string(), tx);    
 
     loop {
-
-        let stream = Arc::clone(&stream);
         // read input from stream.
 
-        let mut buffer = [0; 1024];
+        let mut buffer = String::new();
 
-        stream.lock().unwrap().read(&mut buffer).expect("failed to read into buffer");
+        reader.read_line(&mut buffer).expect("failed to read into buffer");
 
-        println!("{}", String::from_utf8_lossy(&buffer[..]));
+        if buffer.contains("ping") {
+          write_stream.write_all(b"Hello!");  
+        }
+
+        println!("[{}] {}", username.trim(), buffer);
+
     }
 }
 
